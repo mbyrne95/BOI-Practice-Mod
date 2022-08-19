@@ -1,4 +1,31 @@
 local Mod = RegisterMod("A", 1)
+local GameState = {}
+local json = require("json")
+
+local localDmgCnt
+local localRunCnt
+
+-- loading mod data
+function Mod:onStart()
+    GameState = json.decode(Mod:LoadData())
+    if GameState.DamageCount == nil then GameState.DamageCount = 0 end
+    if GameState.RunCount == nil then GameState.RunCount = 1 end
+    localDmgCnt = GameState.DamageCount
+    localRunCnt = GameState.RunCount
+
+end
+
+Mod:AddCallback(ModCallbacks.MC_POST_PLAYER_INIT, Mod.onStart)
+
+-- saving mod data
+function Mod:onExit(save)
+    GameState.DamageCount = localDmgCnt
+    GameState.RunCount = localRunCnt
+    Mod:SaveData(json.encode(GameState))
+end
+
+Mod:AddCallback(ModCallbacks.MC_PRE_GAME_EXIT, Mod.onExit)
+Mod:AddCallback(ModCallbacks.MC_POST_GAME_END, Mod.onExit)
 
 local dmg = 0
 local curseUnknown = false
@@ -10,6 +37,7 @@ local player = Isaac.GetPlayer(0)
 function Mod:damageCounter(target, amount, flags, source, num)
     if target.Type == EntityType.ENTITY_PLAYER then
         dmg = dmg + amount
+        localDmgCnt = localDmgCnt + amount
     end
 end
 
@@ -17,6 +45,7 @@ end
 function Mod:newRunEval(shouldSave)
     if shouldSave == false then
         dmg = 0
+        localRunCnt = localRunCnt + 1
     end
 end
 
@@ -31,18 +60,27 @@ local function onRender(t)
 
     f:Load("font/pftempestasevencondensed.fnt")
 
+    local avgDmgDisplay
+
+    if (localDmgCnt == nil or localDmgCnt == 0 or localRunCnt == nil or localRunCnt == 0) then
+        avgDmgDisplay = "TBD"
+    else 
+        avgDmgDisplay = (localDmgCnt/2)/localRunCnt
+        avgDmgDisplay = math.floor(avgDmgDisplay*100)/100
+    end
+
     local printDMG = math.floor(dmg/2)
 
     -- if unknown is active, don't display damage (player can cheat w/ this mod)
     if curseUnknown == true then
-        f:DrawStringScaled("DMG: ???", textCoords[1], textCoords[2], scaleAmountX, scaleAmountY, textColor)
+        f:DrawStringScaled("DMG: ??? | AVG: " .. tostring(avgDmgDisplay), textCoords[1], textCoords[2], scaleAmountX, scaleAmountY, textColor)
         --Isaac.RenderText("DMG: ???", 65, 30, 1, 1, 1, 0.5)
     else
         if (dmg % 2 > 0) then
-            f:DrawStringScaled("DMG: " .. tostring(printDMG) .. "\189", textCoords[1], textCoords[2], scaleAmountX, scaleAmountY, textColor)
+            f:DrawStringScaled("DMG: " .. tostring(printDMG) .. "\189" .. " | AVG: " .. tostring(avgDmgDisplay), textCoords[1], textCoords[2], scaleAmountX, scaleAmountY, textColor)
             --Isaac.RenderText("DMG: " .. tostring(printDMG) .. "\189", 65, 30, 1, 1, 1, 0.5)
         else
-            f:DrawStringScaled("DMG: " .. tostring(printDMG), textCoords[1], textCoords[2], scaleAmountX, scaleAmountY, textColor)
+            f:DrawStringScaled("DMG: " .. tostring(printDMG) .. " | AVG: " .. tostring(avgDmgDisplay), textCoords[1], textCoords[2], scaleAmountX, scaleAmountY, textColor)
             --Isaac.RenderText("DMG: " .. tostring(printDMG), 65, 30, 1, 1, 1, 0.5)
         end
     end
@@ -69,6 +107,7 @@ local function healthEval()
         textCoords[2] = 30
     end
 end
+
 
 
 Mod:AddCallback(ModCallbacks.MC_POST_RENDER, onRender)
